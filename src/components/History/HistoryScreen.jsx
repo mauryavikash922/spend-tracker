@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { formatCurrency, currentMonthLabel } from '../../utils/formatters';
+import { formatCurrency } from '../../utils/formatters';
 import { Toast } from '../Layout/Toast';
 import { LogForm } from '../LogForm/LogForm';
 

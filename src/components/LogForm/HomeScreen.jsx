@@ -17,7 +17,7 @@ const TYPE_ICONS = {
   Borrowed: 'ri-arrow-left-down-line',
 };
 
-export function HomeScreen({ user, transactions, onLogExpense, onEditExpense, allCategories, personNames, onLogout }) {
+export function HomeScreen({ user, transactions, onLogExpense, onEditExpense, allCategories, personNames, onLogout, investmentBuckets, onAddBucket }) {
   const [toast, setToast] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(currentMonthLabel());
@@ -84,6 +84,8 @@ export function HomeScreen({ user, transactions, onLogExpense, onEditExpense, al
             loading={submitting}
             personNames={personNames}
             allCategories={allCategories}
+            investmentBuckets={investmentBuckets}
+            onAddBucket={onAddBucket}
           />
         </div>
 

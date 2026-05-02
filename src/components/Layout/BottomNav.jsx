@@ -1,9 +1,10 @@
 const tabs = [
-  { id: 'home', label: 'Home', icon: 'ri-home-5-line', activeIcon: 'ri-home-5-fill' },
-  { id: 'people', label: 'People', icon: 'ri-group-line', activeIcon: 'ri-group-fill' },
-  { id: 'reports', label: 'Reports', icon: 'ri-bar-chart-2-line', activeIcon: 'ri-bar-chart-2-fill' },
-  { id: 'history', label: 'History', icon: 'ri-history-line', activeIcon: 'ri-history-line' },
-  { id: 'profile', label: 'Profile', icon: 'ri-user-line', activeIcon: 'ri-user-fill' },
+  { id: 'home',        label: 'Home',    icon: 'ri-home-5-line',        activeIcon: 'ri-home-5-fill' },
+  { id: 'people',      label: 'People',  icon: 'ri-group-line',         activeIcon: 'ri-group-fill' },
+  { id: 'reports',     label: 'Reports', icon: 'ri-bar-chart-2-line',   activeIcon: 'ri-bar-chart-2-fill' },
+  { id: 'investments', label: 'Invest',  icon: 'ri-line-chart-line',    activeIcon: 'ri-line-chart-fill' },
+  { id: 'history',     label: 'History', icon: 'ri-history-line',       activeIcon: 'ri-history-line' },
+  { id: 'profile',     label: 'Profile', icon: 'ri-user-line',          activeIcon: 'ri-user-fill' },
 ];
 
 export function BottomNav({ active, onChange }) {

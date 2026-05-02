@@ -9,6 +9,7 @@ import { PeopleScreen } from './components/People/PeopleScreen';
 import { ReportsScreen } from './components/Reports/ReportsScreen';
 import { HistoryScreen } from './components/History/HistoryScreen';
 import { ProfileScreen } from './components/Profile/ProfileScreen';
+import { InvestmentsScreen } from './components/Investments/InvestmentsScreen';
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -33,10 +34,12 @@ function AppContent() {
   const { user, token, sheetId, loading: authLoading, error: authError, login, logout } = useGoogleAuth();
   const {
     transactions, ledger, allCategories, customCategories,
+    investmentBuckets,
     loading, error, fetchAll,
     logExpense, editExpense, removeTx,
     settle, settleMyDebt,
     addCategory, removeCategory,
+    addBucket, removeBucket,
     personNames,
   } = useGoogleSheets(token, sheetId);
 
@@ -67,6 +70,8 @@ function AppContent() {
         allCategories={allCategories}
         personNames={personNames}
         onLogout={logout}
+        investmentBuckets={investmentBuckets}
+        onAddBucket={addBucket}
       />
     ),
     people: (
@@ -94,6 +99,14 @@ function AppContent() {
         allCategories={allCategories}
       />
     ),
+    investments: (
+      <InvestmentsScreen
+        transactions={transactions}
+        investmentBuckets={investmentBuckets}
+        onAddBucket={addBucket}
+        onRemoveBucket={removeBucket}
+      />
+    ),
     profile: (
       <ProfileScreen
         user={user}
@@ -101,6 +114,8 @@ function AppContent() {
         customCategories={customCategories}
         onAddCategory={addCategory}
         onRemoveCategory={removeCategory}
+        token={token}
+        sheetId={sheetId}
       />
     ),
   };

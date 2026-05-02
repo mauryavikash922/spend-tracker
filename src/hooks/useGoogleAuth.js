@@ -7,19 +7,30 @@ const USER_KEY = 'sw_user_info';
 const SHEET_KEY = 'sw_sheet_id';
 const TOKEN_EXP_KEY = 'sw_token_exp';
 
+// Compute all auth state atomically — if token is expired, clear everything so the
+// app never ends up in a "logged-in-but-no-token" state that shows blank screens.
+function getInitialAuthState() {
+  const exp = localStorage.getItem(TOKEN_EXP_KEY);
+  const tokenExpired = exp && Date.now() > parseInt(exp);
+  if (tokenExpired) {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_EXP_KEY);
+    localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(SHEET_KEY);
+    return { user: null, token: null, sheetId: null };
+  }
+  return {
+    user: (() => { try { return JSON.parse(localStorage.getItem(USER_KEY)); } catch { return null; } })(),
+    token: localStorage.getItem(TOKEN_KEY),
+    sheetId: localStorage.getItem(SHEET_KEY),
+  };
+}
+
 export function useGoogleAuth() {
-  const [user, setUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(USER_KEY)); } catch { return null; }
-  });
-  const [token, setToken] = useState(() => {
-    const exp = localStorage.getItem(TOKEN_EXP_KEY);
-    if (exp && Date.now() > parseInt(exp)) {
-      localStorage.removeItem(TOKEN_KEY);
-      return null;
-    }
-    return localStorage.getItem(TOKEN_KEY);
-  });
-  const [sheetId, setSheetId] = useState(() => localStorage.getItem(SHEET_KEY));
+  const initial = getInitialAuthState();
+  const [user, setUser] = useState(initial.user);
+  const [token, setToken] = useState(initial.token);
+  const [sheetId, setSheetId] = useState(initial.sheetId);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 

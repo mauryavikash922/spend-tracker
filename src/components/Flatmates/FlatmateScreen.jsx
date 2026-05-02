@@ -73,7 +73,7 @@ function SettleModal({ flatmate, totalOwed, onConfirm, onClose, loading }) {
   );
 }
 
-export function FlatmateScreen({ ledger, transactions, onSettle, loading }) {
+export function FlatmateScreen({ ledger, transactions, onSettle }) {
   const [settling, setSettling] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState(null);

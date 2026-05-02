@@ -1,8 +1,9 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   getSheetData, appendTransaction, appendLedgerRows,
   deleteTransaction, settlePerson, settleDebt,
   updateTransaction, getCustomCategories, saveCustomCategories,
+  getInvestmentBuckets, saveInvestmentBuckets,
 } from '../utils/sheetsHelper';
 import { toMonthLabel } from '../utils/formatters';
 import { DEFAULT_CATEGORIES } from '../utils/categories';
@@ -16,9 +17,16 @@ export function useGoogleSheets(token, sheetId) {
   const [transactions, setTransactions] = useState([]);
   const [ledger, setLedger] = useState([]);
   const [customCategories, setCustomCategories] = useState([]);
+  const [investmentBuckets, setInvestmentBuckets] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const hasFetched = useRef(false);
+
+  // Reset hasFetched whenever the token or sheetId changes (e.g. logout → re-login),
+  // so the next fetchAll call always loads fresh data instead of bailing out early.
+  useEffect(() => {
+    hasFetched.current = false;
+  }, [token, sheetId]);
 
   const allCategories = [...DEFAULT_CATEGORIES, ...customCategories];
 
@@ -28,13 +36,15 @@ export function useGoogleSheets(token, sheetId) {
     setLoading(true);
     setError(null);
     try {
-      const [data, cats] = await Promise.all([
+      const [data, cats, buckets] = await Promise.all([
         getSheetData(token, sheetId),
         getCustomCategories(token, sheetId),
+        getInvestmentBuckets(token, sheetId),
       ]);
       setTransactions(data.transactions);
       setLedger(data.ledger);
       setCustomCategories(cats);
+      setInvestmentBuckets(buckets);
       hasFetched.current = true;
     } catch (e) {
       setError(e.message);
@@ -168,6 +178,18 @@ export function useGoogleSheets(token, sheetId) {
     await saveCustomCategories(token, sheetId, updated);
   }, [token, sheetId, customCategories]);
 
+  const addBucket = useCallback(async (bucket) => {
+    const updated = [...investmentBuckets, bucket];
+    setInvestmentBuckets(updated);
+    await saveInvestmentBuckets(token, sheetId, updated);
+  }, [token, sheetId, investmentBuckets]);
+
+  const removeBucket = useCallback(async (name) => {
+    const updated = investmentBuckets.filter(b => b.name !== name);
+    setInvestmentBuckets(updated);
+    await saveInvestmentBuckets(token, sheetId, updated);
+  }, [token, sheetId, investmentBuckets]);
+
   const personNames = [...new Set(
     transactions
       .filter(t => ['Shared', 'Lent', 'Borrowed'].includes(t.type) && t.sharedWith)
@@ -177,10 +199,12 @@ export function useGoogleSheets(token, sheetId) {
 
   return {
     transactions, ledger, customCategories, allCategories,
+    investmentBuckets,
     loading, error, fetchAll,
     logExpense, editExpense, removeTx,
     settle, settleMyDebt,
     addCategory, removeCategory,
+    addBucket, removeBucket,
     personNames,
   };
 }

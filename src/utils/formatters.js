@@ -62,3 +62,16 @@ export function nextMonth(label) {
   d.setMonth(d.getMonth() + 1);
   return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
 }
+
+// Investment bucket helpers — bucket stored in comment as "[BucketName] user note"
+export function parseBucket(comment) {
+  if (!comment) return { bucket: '', userComment: '' };
+  const match = comment.match(/^\[([^\]]+)\](.*)/s);
+  if (match) return { bucket: match[1].trim(), userComment: match[2].trim() };
+  return { bucket: '', userComment: comment };
+}
+
+export function formatBucketComment(bucket, userComment) {
+  if (!bucket) return userComment || '';
+  return `[${bucket}]${userComment ? ' ' + userComment : ''}`;
+}

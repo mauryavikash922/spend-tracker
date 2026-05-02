@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { todayStr, dateToInputValue, inputValueToDate, formatCurrency } from '../../utils/formatters';
+import { todayStr, dateToInputValue, inputValueToDate, formatCurrency, parseBucket, formatBucketComment } from '../../utils/formatters';
 import { calcEqualSplit } from '../../utils/splitCalculator';
 
 const TYPES = [
@@ -13,15 +13,26 @@ const EMPTY_FORM = {
   amount: '', paidTo: '', category: 'Need', type: 'Personal',
   date: todayStr(), sharedWith: '', splitType: 'equal',
   splitCount: '2', myShare: '', personName: '', comment: '',
+  investmentBucket: '',
 };
 
-export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames = [], allCategories = [] }) {
+export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames = [], allCategories = [], investmentBuckets = [], onAddBucket }) {
   const isEdit = !!editTx;
   const [form, setForm] = useState(EMPTY_FORM);
   const [suggestions, setSuggestions] = useState([]);
+  const [newBucketInput, setNewBucketInput] = useState('');
+  const [showNewBucket, setShowNewBucket] = useState(false);
+  // local buckets merges saved + any created in this session
+  const [localBuckets, setLocalBuckets] = useState([]);
+
+  // Sync localBuckets whenever investmentBuckets prop changes
+  useEffect(() => {
+    setLocalBuckets(investmentBuckets.map(b => b.name));
+  }, [investmentBuckets]);
 
   useEffect(() => {
     if (editTx) {
+      const { bucket, userComment } = parseBucket(editTx.comment);
       setForm({
         amount: String(editTx.fullAmount || ''),
         paidTo: editTx.paidTo || '',
@@ -33,7 +44,8 @@ export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames =
         splitCount: String(editTx.splitCount || 2),
         myShare: String(editTx.myShare || ''),
         personName: editTx.sharedWith || '',
-        comment: editTx.comment || '',
+        comment: userComment,
+        investmentBucket: bucket,
       });
     } else {
       setForm(f => ({ ...EMPTY_FORM, date: f.date }));
@@ -42,7 +54,6 @@ export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames =
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
-  const selectedCat = allCategories.find(c => c.label === form.category) || allCategories[0];
 
   const previewShare = form.type === 'Shared' && form.amount
     ? (form.splitType === 'custom'
@@ -84,7 +95,10 @@ export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames =
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.amount || !form.paidTo) return;
-    const payload = { ...form, fullAmount: parseFloat(form.amount) };
+    const encodedComment = form.category === 'Investment'
+      ? formatBucketComment(form.investmentBucket, form.comment)
+      : form.comment || '';
+    const payload = { ...form, fullAmount: parseFloat(form.amount), comment: encodedComment };
     if (isEdit) {
       await onEditSubmit(editTx.transactionId, payload);
     } else {
@@ -246,7 +260,10 @@ export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames =
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Category</label>
           <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             {allCategories.map(cat => (
-              <button key={cat.label} type="button" onClick={() => set('category', cat.label)}
+              <button key={cat.label} type="button" onClick={() => {
+                set('category', cat.label);
+                if (cat.label !== 'Investment') set('investmentBucket', '');
+              }}
                 className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
                   form.category === cat.label
                     ? 'bg-indigo-500 text-white border-indigo-500'
@@ -256,6 +273,69 @@ export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames =
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Investment Bucket — shown when Investment is selected */}
+      {form.category === 'Investment' && !isEdit && (
+        <div className="bg-emerald-50 rounded-2xl p-4 space-y-3 border border-emerald-100">
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Investment Bucket</label>
+          <div className="flex gap-2 flex-wrap">
+            {localBuckets.map(name => (
+              <button key={name} type="button"
+                onClick={() => set('investmentBucket', form.investmentBucket === name ? '' : name)}
+                className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
+                  form.investmentBucket === name
+                    ? 'bg-emerald-500 text-white border-emerald-500'
+                    : 'bg-white text-gray-600 border-gray-200'
+                }`}>
+                <i className="ri-folder-line text-sm" />{name}
+              </button>
+            ))}
+            {!showNewBucket && (
+              <button type="button" onClick={() => setShowNewBucket(true)}
+                className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-dashed border-emerald-300 text-emerald-600 bg-transparent">
+                <i className="ri-add-line" /> New Bucket
+              </button>
+            )}
+          </div>
+          {showNewBucket && (
+            <div className="flex gap-2">
+              <input type="text" placeholder="e.g. Mutual Fund 1" value={newBucketInput}
+                onChange={e => setNewBucketInput(e.target.value)}
+                onKeyDown={async e => {
+                  if (e.key === 'Enter' && newBucketInput.trim()) {
+                    e.preventDefault();
+                    const name = newBucketInput.trim();
+                    setLocalBuckets(prev => prev.includes(name) ? prev : [...prev, name]);
+                    set('investmentBucket', name);
+                    setNewBucketInput('');
+                    setShowNewBucket(false);
+                    if (onAddBucket) onAddBucket({ name });
+                  }
+                }}
+                className="input-field flex-1 py-2 text-sm" autoFocus maxLength={30} />
+              <button type="button"
+                onClick={async () => {
+                  if (!newBucketInput.trim()) return;
+                  const name = newBucketInput.trim();
+                  setLocalBuckets(prev => prev.includes(name) ? prev : [...prev, name]);
+                  set('investmentBucket', name);
+                  setNewBucketInput('');
+                  setShowNewBucket(false);
+                  if (onAddBucket) onAddBucket({ name });
+                }}
+                disabled={!newBucketInput.trim()}
+                className="bg-emerald-500 text-white px-4 rounded-xl text-sm font-medium active:scale-95 transition-all disabled:opacity-50">
+                <i className="ri-check-line" />
+              </button>
+            </div>
+          )}
+          {form.investmentBucket && (
+            <p className="text-xs text-emerald-600 flex items-center gap-1">
+              <i className="ri-folder-check-line" /> Saving to: <strong>{form.investmentBucket}</strong>
+            </p>
+          )}
         </div>
       )}
 

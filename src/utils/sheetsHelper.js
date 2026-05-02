@@ -44,14 +44,7 @@ async function driveGet(token, path) {
   return res.json();
 }
 
-async function drivePatch(token, path, body) {
-  const res = await fetch(`https://www.googleapis.com/drive/v3${path}`, {
-    method: 'PATCH',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  return res.json();
-}
+
 
 async function drivePost(token, body) {
   const res = await fetch('https://www.googleapis.com/drive/v3/files', {
@@ -351,5 +344,34 @@ export async function settleDebt(token, sheetId, personName, amount, ledger, set
   }
   if (newLedgerRows.length > 0) {
     await appendLedgerRows(token, sheetId, newLedgerRows);
+  }
+}
+
+export async function getInvestmentBuckets(token, sheetId) {
+  try {
+    const data = await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(TABS.SETTINGS)}!A2:B`);
+    const rows = data.values || [];
+    const row = rows.find(r => r[0] === 'investment_buckets');
+    if (row && row[1]) return JSON.parse(row[1]);
+    return [];
+  } catch { return []; }
+}
+
+export async function saveInvestmentBuckets(token, sheetId, buckets) {
+  const data = await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(TABS.SETTINGS)}!A2:B`);
+  const rows = data.values || [];
+  const rowIdx = rows.findIndex(r => r[0] === 'investment_buckets');
+  const range = rowIdx >= 0
+    ? `${TABS.SETTINGS}!A${rowIdx + 2}:B${rowIdx + 2}`
+    : `${TABS.SETTINGS}!A2:B2`;
+
+  if (rowIdx >= 0) {
+    await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=RAW`, 'PUT', {
+      values: [['investment_buckets', JSON.stringify(buckets)]],
+    });
+  } else {
+    await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, 'POST', {
+      values: [['investment_buckets', JSON.stringify(buckets)]],
+    });
   }
 }
