@@ -12,7 +12,24 @@ function InfoRow({ icon, label, value }) {
   );
 }
 
-export function ProfileScreen({ user, onLogout, customCategories, onAddCategory, onRemoveCategory, token, sheetId }) {
+const TOOL_CARDS = [
+  {
+    id: 'investments',
+    label: 'Investments',
+    desc: 'Track portfolio & buckets',
+    icon: 'ri-line-chart-line',
+    gradient: 'linear-gradient(135deg,#10b981,#0d9488)',
+  },
+  {
+    id: 'wallet',
+    label: 'Wallet',
+    desc: 'Bank accounts & cards',
+    icon: 'ri-wallet-3-line',
+    gradient: 'linear-gradient(135deg,#6366f1,#7c3aed)',
+  },
+];
+
+export function ProfileScreen({ user, onLogout, customCategories, onAddCategory, onRemoveCategory, token, sheetId, onNavigate }) {
   const [downloading, setDownloading] = useState(false);
   const [downloadMsg, setDownloadMsg] = useState(null);
 
@@ -76,6 +93,33 @@ export function ProfileScreen({ user, onLogout, customCategories, onAddCategory,
           <InfoRow icon="ri-user-line" label="Name" value={user?.name} />
           <InfoRow icon="ri-mail-line" label="Email" value={user?.email} />
           <InfoRow icon="ri-google-line" label="Storage" value="Your Google Drive" />
+        </div>
+
+        {/* Tools section */}
+        <div>
+          <h3 className="font-semibold text-gray-700 text-xs uppercase tracking-wider mb-3 flex items-center gap-2">
+            <i className="ri-grid-line text-gray-400" /> Tools
+          </h3>
+          <div className="flex gap-3">
+            {TOOL_CARDS.map(card => (
+              <button
+                key={card.id}
+                onClick={() => onNavigate && onNavigate(card.id)}
+                className="flex-1 rounded-2xl p-4 text-left active:scale-95 transition-all shadow-sm"
+                style={{ background: card.gradient }}
+              >
+                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center mb-3">
+                  <i className={`${card.icon} text-xl text-white`} />
+                </div>
+                <p className="font-bold text-white text-sm">{card.label}</p>
+                <p className="text-white/70 text-xs mt-0.5">{card.desc}</p>
+                <div className="flex items-center gap-1 mt-3 text-white/60">
+                  <span className="text-[10px] font-medium">Open</span>
+                  <i className="ri-arrow-right-line text-xs" />
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Custom Categories */}

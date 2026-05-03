@@ -10,6 +10,7 @@ import { ReportsScreen } from './components/Reports/ReportsScreen';
 import { HistoryScreen } from './components/History/HistoryScreen';
 import { ProfileScreen } from './components/Profile/ProfileScreen';
 import { InvestmentsScreen } from './components/Investments/InvestmentsScreen';
+import { WalletScreen } from './components/Wallet/WalletScreen';
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -35,11 +36,13 @@ function AppContent() {
   const {
     transactions, ledger, allCategories, customCategories,
     investmentBuckets,
+    wallets,
     loading, error, fetchAll,
     logExpense, editExpense, removeTx,
     settle, settleMyDebt,
     addCategory, removeCategory,
     addBucket, removeBucket,
+    addWallet, removeWallet, setWalletBalance,
     personNames,
   } = useGoogleSheets(token, sheetId);
 
@@ -72,6 +75,7 @@ function AppContent() {
         onLogout={logout}
         investmentBuckets={investmentBuckets}
         onAddBucket={addBucket}
+        wallets={wallets}
       />
     ),
     people: (
@@ -107,6 +111,16 @@ function AppContent() {
         onRemoveBucket={removeBucket}
       />
     ),
+    wallet: (
+      <WalletScreen
+        transactions={transactions}
+        wallets={wallets}
+        onAddWallet={addWallet}
+        onRemoveWallet={removeWallet}
+        onSetBalance={setWalletBalance}
+        onLogExpense={logExpense}
+      />
+    ),
     profile: (
       <ProfileScreen
         user={user}
@@ -116,6 +130,7 @@ function AppContent() {
         onRemoveCategory={removeCategory}
         token={token}
         sheetId={sheetId}
+        onNavigate={setActiveTab}
       />
     ),
   };

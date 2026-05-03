@@ -7,16 +7,17 @@ const TYPES = [
   { id: 'Shared', label: 'Shared', icon: 'ri-group-line' },
   { id: 'Lent', label: 'Lent', icon: 'ri-arrow-right-up-line' },
   { id: 'Borrowed', label: 'Borrowed', icon: 'ri-arrow-left-down-line' },
+  { id: 'Credit', label: 'Credit', icon: 'ri-arrow-down-circle-line' },
 ];
 
 const EMPTY_FORM = {
   amount: '', paidTo: '', category: 'Need', type: 'Personal',
   date: todayStr(), sharedWith: '', splitType: 'equal',
   splitCount: '2', myShare: '', personName: '', comment: '',
-  investmentBucket: '',
+  investmentBucket: '', wallet: '',
 };
 
-export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames = [], allCategories = [], investmentBuckets = [], onAddBucket }) {
+export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames = [], allCategories = [], investmentBuckets = [], onAddBucket, wallets = [] }) {
   const isEdit = !!editTx;
   const [form, setForm] = useState(EMPTY_FORM);
   const [suggestions, setSuggestions] = useState([]);
@@ -95,9 +96,11 @@ export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames =
   const handleSubmit = async (e) => {
     e.preventDefault();
     const isPeopleType = form.type === 'Lent' || form.type === 'Borrowed';
+    const isCredit = form.type === 'Credit';
     if (!form.amount) return;
-    if (!isPeopleType && !form.paidTo) return;   // Personal/Shared require Paid To
-    if (isPeopleType && !form.personName) return; // Lent/Borrowed require a person name
+    if (!isPeopleType && !isCredit && !form.paidTo) return;
+    if (isPeopleType && !form.personName) return;
+    if (isCredit && !form.wallet) return; // Credit requires a wallet
     const encodedComment = form.category === 'Investment'
       ? formatBucketComment(form.investmentBucket, form.comment)
       : form.comment || '';
@@ -353,25 +356,72 @@ export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames =
         </div>
       </div>
 
-      {/* Comment */}
-      <div>
-        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-          Comment <span className="text-gray-300 normal-case font-normal">(optional)</span>
-        </label>
-        <div className="relative">
-          <i className="ri-chat-1-line absolute left-3 top-3 text-gray-400 text-lg" />
-          <textarea placeholder="Add a note…" value={form.comment}
-            onChange={e => set('comment', e.target.value)}
-            className="input-field pl-9 resize-none text-sm" rows={2} maxLength={200} />
+      {/* Comment — hidden for Credit type since wallet is required label */}
+      {form.category !== 'Investment' && (
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+            {form.type === 'Credit' ? 'Source' : 'Comment'} <span className="text-gray-300 normal-case font-normal">(optional)</span>
+          </label>
+          <div className="relative">
+            <i className="ri-chat-1-line absolute left-3 top-3 text-gray-400 text-lg" />
+            <textarea placeholder={form.type === 'Credit' ? 'e.g. Salary, Refund…' : 'Add a note…'} value={form.comment}
+              onChange={e => set('comment', e.target.value)}
+              className="input-field pl-9 resize-none text-sm" rows={2} maxLength={200} />
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Wallet Selector */}
+      {wallets.length > 0 && !isEdit && (
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+            Wallet {form.type !== 'Credit' && <span className="text-gray-300 normal-case font-normal">(optional)</span>}
+            {form.type === 'Credit' && <span className="text-emerald-500 normal-case font-normal"> — required for Credit</span>}
+          </label>
+          <div className="flex gap-2 flex-wrap">
+            {form.type !== 'Credit' && (
+              <button type="button" onClick={() => set('wallet', '')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
+                  !form.wallet ? 'bg-gray-800 text-white border-gray-800' : 'bg-gray-50 text-gray-500 border-gray-200'
+                }`}>
+                <i className="ri-close-line text-sm" /> None
+              </button>
+            )}
+            {wallets.map(w => (
+              <button key={w.id} type="button"
+                onClick={() => set('wallet', form.wallet === w.name ? (form.type === 'Credit' ? w.name : '') : w.name)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
+                  form.wallet === w.name
+                    ? 'text-white border-transparent'
+                    : 'bg-gray-50 text-gray-600 border-gray-200'
+                }`}
+                style={form.wallet === w.name ? { background: w.type === 'bank' ? w.color : '#6366f1' } : {}}>
+                <i className={`${w.type === 'bank' ? 'ri-bank-line' : 'ri-bank-card-line'} text-sm`} />{w.name}
+              </button>
+            ))}
+          </div>
+          {form.wallet && (
+            <p className="text-xs text-gray-400 mt-1.5 flex items-center gap-1">
+              <i className="ri-information-line" />
+              {form.type === 'Credit' ? `Will credit ₹ to ${form.wallet}` :
+               form.type === 'Borrowed' ? `Will credit ₹ to ${form.wallet}` :
+               `Will debit ₹ from ${form.wallet}`}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Submit */}
-      <button type="submit" disabled={loading || !form.amount || (!form.paidTo && form.type !== 'Lent' && form.type !== 'Borrowed')}
+      <button type="submit"
+        disabled={loading || !form.amount
+          || (!form.paidTo && !['Lent','Borrowed','Credit'].includes(form.type))
+          || (['Lent','Borrowed'].includes(form.type) && !form.personName)
+          || (form.type === 'Credit' && !form.wallet)
+        }
         className="btn-primary w-full flex items-center justify-center gap-2">
         {loading
           ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          : <><i className={isEdit ? 'ri-save-line' : 'ri-add-circle-line'} />{isEdit ? 'Save Changes' : 'Log Expense'}</>
+          : <><i className={isEdit ? 'ri-save-line' : form.type === 'Credit' ? 'ri-arrow-down-circle-line' : 'ri-add-circle-line'} />{isEdit ? 'Save Changes' : form.type === 'Credit' ? 'Log Credit' : 'Log Expense'}</>
         }
       </button>
 

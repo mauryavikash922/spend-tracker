@@ -4,6 +4,7 @@ import {
   deleteTransaction, settlePerson, settleDebt,
   updateTransaction, getCustomCategories, saveCustomCategories,
   getInvestmentBuckets, saveInvestmentBuckets,
+  getWallets, appendWallet, updateWalletRow, deleteWalletRow,
 } from '../utils/sheetsHelper';
 import { toMonthLabel } from '../utils/formatters';
 import { DEFAULT_CATEGORIES } from '../utils/categories';
@@ -18,6 +19,7 @@ export function useGoogleSheets(token, sheetId) {
   const [ledger, setLedger] = useState([]);
   const [customCategories, setCustomCategories] = useState([]);
   const [investmentBuckets, setInvestmentBuckets] = useState([]);
+  const [wallets, setWallets] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const hasFetched = useRef(false);
@@ -36,15 +38,17 @@ export function useGoogleSheets(token, sheetId) {
     setLoading(true);
     setError(null);
     try {
-      const [data, cats, buckets] = await Promise.all([
+      const [data, cats, buckets, wals] = await Promise.all([
         getSheetData(token, sheetId),
         getCustomCategories(token, sheetId),
         getInvestmentBuckets(token, sheetId),
+        getWallets(token, sheetId),
       ]);
       setTransactions(data.transactions);
       setLedger(data.ledger);
       setCustomCategories(cats);
       setInvestmentBuckets(buckets);
+      setWallets(wals);
       hasFetched.current = true;
     } catch (e) {
       setError(e.message);
@@ -76,7 +80,7 @@ export function useGoogleSheets(token, sheetId) {
       type,
       (type === 'Shared' || type === 'Lent' || type === 'Borrowed') ? form.personName || form.sharedWith : '',
       type === 'Shared' ? (parseInt(form.splitCount) || 1) : 1,
-      settlementStatus, '', transactionId, month, form.comment || '',
+      settlementStatus, '', transactionId, month, form.comment || '', form.wallet || '',
     ];
 
     await appendTransaction(token, sheetId, txRow);
@@ -103,6 +107,7 @@ export function useGoogleSheets(token, sheetId) {
       sharedWith: txRow[6],
       splitCount: txRow[7],
       settlementStatus, settlementDate: '', transactionId, month, comment: form.comment || '',
+      wallet: form.wallet || '',
     };
 
     setTransactions(prev => [newTx, ...prev]);
@@ -136,7 +141,7 @@ export function useGoogleSheets(token, sheetId) {
     const txRow = [
       form.date, form.paidTo, fullAmount, myShare, form.category,
       type, tx.sharedWith, tx.splitCount,
-      tx.settlementStatus, tx.settlementDate, transactionId, month, form.comment || '',
+      tx.settlementStatus, tx.settlementDate, transactionId, month, form.comment || '', tx.wallet || '',
     ];
 
     await updateTransaction(token, sheetId, tx._rowIndex, txRow);
@@ -190,6 +195,27 @@ export function useGoogleSheets(token, sheetId) {
     await saveInvestmentBuckets(token, sheetId, updated);
   }, [token, sheetId, investmentBuckets]);
 
+  const addWallet = useCallback(async (wallet) => {
+    setWallets(prev => [...prev, wallet]);
+    await appendWallet(token, sheetId, wallet);
+    await fetchAll(true); // refresh to get _rowIndex
+  }, [token, sheetId, fetchAll]);
+
+  const removeWallet = useCallback(async (walletId) => {
+    const w = wallets.find(w => w.id === walletId);
+    if (!w) return;
+    setWallets(prev => prev.filter(w => w.id !== walletId));
+    await deleteWalletRow(token, sheetId, w._rowIndex);
+  }, [token, sheetId, wallets]);
+
+  const setWalletBalance = useCallback(async (walletId, newBalance) => {
+    const w = wallets.find(w => w.id === walletId);
+    if (!w) return;
+    const updated = { ...w, initialBalance: newBalance };
+    setWallets(prev => prev.map(x => x.id === walletId ? updated : x));
+    await updateWalletRow(token, sheetId, w._rowIndex, updated);
+  }, [token, sheetId, wallets]);
+
   const personNames = [...new Set(
     transactions
       .filter(t => ['Shared', 'Lent', 'Borrowed'].includes(t.type) && t.sharedWith)
@@ -200,11 +226,13 @@ export function useGoogleSheets(token, sheetId) {
   return {
     transactions, ledger, customCategories, allCategories,
     investmentBuckets,
+    wallets,
     loading, error, fetchAll,
     logExpense, editExpense, removeTx,
     settle, settleMyDebt,
     addCategory, removeCategory,
     addBucket, removeBucket,
+    addWallet, removeWallet, setWalletBalance,
     personNames,
   };
 }

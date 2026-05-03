@@ -8,13 +8,16 @@ const TABS = {
   LEDGER_LEGACY: 'Flatmate Ledger',
   SUMMARY: 'Monthly Summary',
   SETTINGS: 'Settings',
+  WALLETS: 'Wallets',
 };
 
 const TX_HEADERS = [
   'Date', 'Paid To', 'Full Amount', 'My Share', 'Category',
   'Type', 'Shared With', 'Split Count', 'Settlement Status',
-  'Settlement Date', 'Transaction ID', 'Month', 'Comment',
+  'Settlement Date', 'Transaction ID', 'Month', 'Comment', 'Wallet',
 ];
+
+const WALLET_HEADERS = ['ID', 'Name', 'Type', 'Color', 'InitialBalance', 'CreditLimit', 'CreatedAt'];
 
 const LEDGER_HEADERS = [
   'Person Name', 'Transaction ID', 'Date', 'Amount', 'Status',
@@ -112,6 +115,7 @@ export async function findOrCreateSheet(token) {
         { properties: { title: TABS.LEDGER } },
         { properties: { title: TABS.SUMMARY } },
         { properties: { title: TABS.SETTINGS } },
+        { properties: { title: TABS.WALLETS } },
       ],
     }),
   });
@@ -131,6 +135,7 @@ export async function findOrCreateSheet(token) {
       { range: `${TABS.LEDGER}!A1`, values: [LEDGER_HEADERS] },
       { range: `${TABS.SUMMARY}!A1`, values: [SUMMARY_HEADERS] },
       { range: `${TABS.SETTINGS}!A1`, values: [SETTINGS_HEADERS] },
+      { range: `${TABS.WALLETS}!A1`, values: [WALLET_HEADERS] },
     ],
   });
 
@@ -144,7 +149,7 @@ export async function appendTransaction(token, sheetId, row) {
 }
 
 export async function updateTransaction(token, sheetId, rowIndex, row) {
-  await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(TABS.TRANSACTIONS)}!A${rowIndex}:M${rowIndex}?valueInputOption=RAW`, 'PUT', {
+  await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(TABS.TRANSACTIONS)}!A${rowIndex}:N${rowIndex}?valueInputOption=RAW`, 'PUT', {
     values: [row],
   });
 }
@@ -160,7 +165,7 @@ export async function appendLedgerRows(token, sheetId, rows) {
 export async function getSheetData(token, sheetId) {
   const ledgerTab = await getLedgerTabName(token, sheetId);
 
-  const data = await apiRequest(token, `/${sheetId}/values:batchGet?ranges=${encodeURIComponent(TABS.TRANSACTIONS + '!A1:M')}&ranges=${encodeURIComponent(ledgerTab + '!A1:H')}`);
+  const data = await apiRequest(token, `/${sheetId}/values:batchGet?ranges=${encodeURIComponent(TABS.TRANSACTIONS + '!A1:N')}&ranges=${encodeURIComponent(ledgerTab + '!A1:H')}`);
   const [txRange, ledgerRange] = data.valueRanges || [];
 
   const transactions = (txRange?.values || []).slice(1).map((r, i) => ({
@@ -178,6 +183,7 @@ export async function getSheetData(token, sheetId) {
     transactionId: r[10] || '',
     month: r[11] || '',
     comment: r[12] || '',
+    wallet: r[13] || '',
   }));
 
   const ledger = (ledgerRange?.values || []).slice(1).map((r, i) => ({
@@ -374,4 +380,63 @@ export async function saveInvestmentBuckets(token, sheetId, buckets) {
       values: [['investment_buckets', JSON.stringify(buckets)]],
     });
   }
+}
+
+// ── Wallets ──────────────────────────────────────────────────────────────────
+
+async function ensureWalletsTab(token, sheetId) {
+  const meta = await apiRequest(token, `/${sheetId}`);
+  const exists = meta.sheets.some(s => s.properties.title === TABS.WALLETS);
+  if (exists) return;
+  // Create the tab
+  await apiRequest(token, `/${sheetId}:batchUpdate`, 'POST', {
+    requests: [{ addSheet: { properties: { title: TABS.WALLETS } } }],
+  });
+  // Write headers
+  await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(TABS.WALLETS)}!A1?valueInputOption=RAW`, 'PUT', {
+    values: [WALLET_HEADERS],
+  });
+}
+
+export async function getWallets(token, sheetId) {
+  try {
+    const data = await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(TABS.WALLETS)}!A2:G`);
+    return (data.values || []).map((r, i) => ({
+      _rowIndex: i + 2,
+      id: r[0] || '',
+      name: r[1] || '',
+      type: r[2] || 'bank',
+      color: r[3] || '#6366f1',
+      initialBalance: parseFloat(r[4]) || 0,
+      creditLimit: parseFloat(r[5]) || 0,
+      createdAt: r[6] || '',
+    }));
+  } catch { return []; }
+}
+
+export async function appendWallet(token, sheetId, wallet) {
+  await ensureWalletsTab(token, sheetId);
+  await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(TABS.WALLETS)}!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, 'POST', {
+    values: [[wallet.id, wallet.name, wallet.type, wallet.color, wallet.initialBalance, wallet.creditLimit, wallet.createdAt]],
+  });
+}
+
+export async function updateWalletRow(token, sheetId, rowIndex, wallet) {
+  await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(TABS.WALLETS)}!A${rowIndex}:G${rowIndex}?valueInputOption=RAW`, 'PUT', {
+    values: [[wallet.id, wallet.name, wallet.type, wallet.color, wallet.initialBalance, wallet.creditLimit, wallet.createdAt]],
+  });
+}
+
+export async function deleteWalletRow(token, sheetId, rowIndex) {
+  const meta = await apiRequest(token, `/${sheetId}`);
+  const sheet = meta.sheets.find(s => s.properties.title === TABS.WALLETS);
+  if (!sheet) return;
+  const sheetGid = sheet.properties.sheetId;
+  await apiRequest(token, `/${sheetId}:batchUpdate`, 'POST', {
+    requests: [{
+      deleteDimension: {
+        range: { sheetId: sheetGid, dimension: 'ROWS', startIndex: rowIndex - 1, endIndex: rowIndex },
+      },
+    }],
+  });
 }
