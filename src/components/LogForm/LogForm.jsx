@@ -137,9 +137,8 @@ export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames =
         </div>
       </div>
 
-      {/* Type — locked in edit mode */}
-      {!isEdit && (
-        <div>
+      {/* Type */}
+      <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Type</label>
           <div className="grid grid-cols-4 gap-1.5 bg-gray-100 p-1 rounded-xl">
             {TYPES.map(t => (
@@ -149,11 +148,10 @@ export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames =
               </button>
             ))}
           </div>
-        </div>
-      )}
+      </div>
 
       {/* Personal / Shared fields */}
-      {(form.type === 'Personal' || isEdit) && (
+      {(form.type === 'Personal' || form.type === 'Credit') && (
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Paid To</label>
           <div className="relative">
@@ -165,7 +163,7 @@ export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames =
       )}
 
       {/* Lent / Borrowed person field */}
-      {(form.type === 'Lent' || form.type === 'Borrowed') && !isEdit && (
+      {(form.type === 'Lent' || form.type === 'Borrowed') && (
         <div className={`rounded-2xl p-4 space-y-3 border ${form.type === 'Lent' ? 'bg-orange-50 border-orange-100' : 'bg-blue-50 border-blue-100'}`}>
           <div className="relative">
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
@@ -202,7 +200,7 @@ export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames =
       )}
 
       {/* Shared fields */}
-      {form.type === 'Shared' && !isEdit && (
+      {form.type === 'Shared' && (
         <div className="bg-indigo-50 rounded-2xl p-4 space-y-3 border border-indigo-100">
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Paid To</label>
@@ -283,7 +281,7 @@ export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames =
       )}
 
       {/* Investment Bucket — shown when Investment is selected */}
-      {form.category === 'Investment' && !isEdit && (
+      {form.category === 'Investment' && (
         <div className="bg-emerald-50 rounded-2xl p-4 space-y-3 border border-emerald-100">
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Investment Bucket</label>
           <div className="flex gap-2 flex-wrap">
@@ -372,7 +370,7 @@ export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames =
       )}
 
       {/* Wallet Selector */}
-      {wallets.length > 0 && !isEdit && (
+      {wallets.length > 0 && (
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
             Wallet {form.type !== 'Credit' && <span className="text-gray-300 normal-case font-normal">(optional)</span>}
@@ -424,12 +422,6 @@ export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames =
           : <><i className={isEdit ? 'ri-save-line' : form.type === 'Credit' ? 'ri-arrow-down-circle-line' : 'ri-add-circle-line'} />{isEdit ? 'Save Changes' : form.type === 'Credit' ? 'Log Credit' : 'Log Expense'}</>
         }
       </button>
-
-      {isEdit && (
-        <p className="text-xs text-gray-400 text-center flex items-center justify-center gap-1">
-          <i className="ri-lock-line" /> Type and split details are locked after creation
-        </p>
-      )}
     </form>
   );
 }

@@ -32,7 +32,7 @@ function computeBalances(wallets, transactions, month) {
     } else {
       const spent = transactions
         .filter(t => t.wallet === w.name && t.month === month && !['Credit','CardPayment'].includes(t.type))
-        .reduce((s, t) => s + (t.myShare || t.fullAmount || 0), 0);
+        .reduce((s, t) => s + (t.myShare || t.fullAmount || 0), 0) + (w.currentMonthSpends || 0);
       const paid = transactions
         .filter(t => t.type === 'CardPayment' && t.paidTo === w.name && t.month === month)
         .reduce((s, t) => s + (t.fullAmount || 0), 0);
@@ -71,70 +71,116 @@ function InputRow({ label, type = 'text', value, onChange, placeholder }) {
   );
 }
 
+function RecentTxList({ txs, hidden, isDark, walletName, onRemoveTx }) {
+  if (txs.length === 0) return (
+    <p className={`text-xs text-center mt-3 pt-3 border-t ${isDark ? 'border-white/20 text-white/50' : 'border-gray-100 text-gray-400'}`}>No transactions this month</p>
+  );
+  return (
+    <div className={`mt-3 pt-3 border-t space-y-2 ${isDark ? 'border-white/20 text-white/90' : 'border-gray-100 text-gray-700'}`}>
+      <p className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-white/60' : 'text-gray-400'}`}>This Month&apos;s Activity</p>
+      {txs.map(t => {
+        const isCredit = t.type === 'Credit' || t.type === 'Borrowed' || (t.type === 'CardPayment' && t.paidTo === walletName);
+        return (
+          <div key={t.transactionId} className="flex justify-between items-center text-xs group">
+            <div className="truncate pr-2 flex items-center gap-1.5">
+              <span className={`opacity-60 text-[10px]`}>{t.date.substring(0, 5)}</span>
+              <span className="truncate">{t.paidTo || t.category}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`font-semibold tabular-nums shrink-0 ${isCredit ? (isDark ? 'text-emerald-300' : 'text-emerald-600') : ''}`}>
+                {isCredit ? '+' : '-'} {masked(t.myShare || t.fullAmount || 0, hidden)}
+              </span>
+              <button onClick={(e) => { e.stopPropagation(); onRemoveTx(t); }} className={`p-1 rounded opacity-50 active:scale-95 transition-all ${isDark ? 'hover:bg-white/20 hover:opacity-100' : 'hover:bg-gray-200 hover:opacity-100'}`}>
+                <i className="ri-delete-back-2-line" />
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Bank Account card ─────────────────────────────────────────────────────────
 
-function BankCard({ wallet, balance, hidden, onUpdateBalance, onAddCredit, onDelete }) {
+function BankCard({ wallet, balance, hidden, txs, onUpdateBalance, onAddCredit, onDelete, onRemoveTx }) {
+  const [expanded, setExpanded] = useState(false);
   return (
-    <div className="card flex items-center justify-between gap-3">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
-          style={{ background: wallet.color + '20' }}>
-          <i className="ri-bank-line text-xl" style={{ color: wallet.color }} />
+    <div className="card flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer" onClick={() => setExpanded(!expanded)}>
+          <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
+            style={{ background: wallet.color + '20' }}>
+            <i className="ri-bank-line text-xl" style={{ color: wallet.color }} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-gray-900 truncate">{wallet.name}</p>
+            <p className={`text-lg font-bold ${hidden ? 'tracking-widest text-gray-300 text-sm' : ''}`}
+              style={hidden ? {} : { color: wallet.color }}>
+              {masked(balance, hidden)}
+            </p>
+          </div>
+          <i className={`ri-arrow-${expanded ? 'up' : 'down'}-s-line text-gray-400`} />
         </div>
-        <div className="min-w-0">
-          <p className="font-semibold text-gray-900 truncate">{wallet.name}</p>
-          <p className={`text-lg font-bold ${hidden ? 'tracking-widest text-gray-300 text-sm' : ''}`}
-            style={hidden ? {} : { color: wallet.color }}>
-            {masked(balance, hidden)}
-          </p>
+        <div className="flex gap-1.5 flex-shrink-0">
+          <button onClick={onAddCredit} title="Add Credit"
+            className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center active:scale-95 transition-all">
+            <i className="ri-arrow-down-circle-line" />
+          </button>
+          <button onClick={onUpdateBalance} title="Update Balance"
+            className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center active:scale-95 transition-all">
+            <i className="ri-edit-line" />
+          </button>
+          <button onClick={onDelete} title="Delete"
+            className="w-8 h-8 rounded-xl bg-red-50 text-red-400 flex items-center justify-center active:scale-95 transition-all">
+            <i className="ri-delete-bin-line text-sm" />
+          </button>
         </div>
       </div>
-      <div className="flex gap-1.5 flex-shrink-0">
-        <button onClick={onAddCredit} title="Add Credit"
-          className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center active:scale-95 transition-all">
-          <i className="ri-arrow-down-circle-line" />
-        </button>
-        <button onClick={onUpdateBalance} title="Update Balance"
-          className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center active:scale-95 transition-all">
-          <i className="ri-edit-line" />
-        </button>
-        <button onClick={onDelete} title="Delete"
-          className="w-9 h-9 rounded-xl bg-red-50 text-red-400 flex items-center justify-center active:scale-95 transition-all">
-          <i className="ri-delete-bin-line text-sm" />
-        </button>
-      </div>
+      {expanded && <RecentTxList txs={txs} hidden={hidden} isDark={false} walletName={wallet.name} onRemoveTx={onRemoveTx} />}
     </div>
   );
 }
 
 // ── Credit Card ───────────────────────────────────────────────────────────────
 
-function CreditCardUI({ wallet, bal, hidden, onPayBill, onDelete }) {
+function CreditCardUI({ wallet, bal, hidden, txs, onPayBill, onEdit, onDelete, onRemoveTx }) {
+  const [expanded, setExpanded] = useState(false);
   const grad = CARD_GRADIENTS[wallet.color] || CARD_GRADIENTS['grad-dark'];
   const usedPct = wallet.creditLimit > 0 ? Math.min(100, ((bal.outstanding || 0) / wallet.creditLimit) * 100) : 0;
   return (
-    <div className="rounded-2xl p-5 text-white shadow-xl relative overflow-hidden" style={{ background: grad }}>
+    <div className="rounded-2xl p-5 text-white shadow-xl relative overflow-hidden flex flex-col" style={{ background: grad }}>
       {/* Decorative circles */}
-      <div className="absolute right-4 top-4 flex opacity-30">
+      <div className="absolute right-4 top-4 flex opacity-30 pointer-events-none">
         <div className="w-14 h-14 rounded-full bg-white" />
         <div className="w-14 h-14 rounded-full bg-white/60 -ml-7" />
       </div>
       {/* Header row */}
-      <div className="flex justify-between items-start mb-6">
-        <div>
-          <p className="font-bold text-lg">{wallet.name}</p>
-          <p className="text-white/60 text-xs mt-0.5">Limit {hidden ? '●●●●' : formatCurrency(wallet.creditLimit)}</p>
+      <div className="flex justify-between items-start mb-6 relative z-10">
+        <div className="cursor-pointer flex-1" onClick={() => setExpanded(!expanded)}>
+          <p className="font-bold text-lg flex items-center gap-1">
+            {wallet.name} <i className={`ri-arrow-${expanded ? 'up' : 'down'}-s-line opacity-50`} />
+          </p>
+          <p className="text-white/60 text-xs mt-0.5">
+            Limit {hidden ? '●●●●' : formatCurrency(wallet.creditLimit)}
+            {wallet.billDate && ` • Bill: ${wallet.billDate}th`}
+          </p>
         </div>
-        <button onClick={onDelete} className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/10 active:scale-95 z-10">
-          <i className="ri-delete-bin-line text-sm" />
-        </button>
+        <div className="flex gap-1.5 z-10 shrink-0">
+          <button onClick={onEdit} className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/10 active:scale-95">
+            <i className="ri-edit-line text-sm" />
+          </button>
+          <button onClick={onDelete} className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/10 active:scale-95">
+            <i className="ri-delete-bin-line text-sm" />
+          </button>
+        </div>
       </div>
       {/* Chip */}
-      <div className="w-10 h-7 rounded bg-yellow-300/80 mb-6 grid grid-cols-2 gap-0.5 p-1">
+      <div className="w-10 h-7 rounded bg-yellow-300/80 mb-6 grid grid-cols-2 gap-0.5 p-1 relative z-10">
         {[0,1,2,3].map(i => <div key={i} className="bg-yellow-600/40 rounded-sm" />)}
       </div>
       {/* Stats */}
-      <div className="flex justify-between mb-3">
+      <div className="flex justify-between mb-3 relative z-10">
         <div><p className="text-white/60 text-xs">This Month</p>
           <p className="font-bold text-xl">{masked(bal.outstanding || 0, hidden)}</p>
         </div>
@@ -143,20 +189,22 @@ function CreditCardUI({ wallet, bal, hidden, onPayBill, onDelete }) {
         </div>
       </div>
       {/* Usage bar */}
-      <div className="bg-white/20 rounded-full h-1.5 mb-3">
+      <div className="bg-white/20 rounded-full h-1.5 mb-3 relative z-10">
         <div className="bg-white rounded-full h-1.5 transition-all" style={{ width: `${usedPct}%` }} />
       </div>
       <button onClick={onPayBill}
-        className="flex items-center gap-1.5 text-xs font-semibold bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-all active:scale-95">
+        className="flex items-center gap-1.5 text-xs font-semibold bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-all active:scale-95 w-max relative z-10">
         <i className="ri-bank-card-line" /> Pay Bill
       </button>
+
+      {expanded && <RecentTxList txs={wallet.currentMonthSpends > 0 ? [{ transactionId: `init-${wallet.id}`, date: wallet.createdAt, paidTo: 'Spends So Far', type: 'Personal', myShare: wallet.currentMonthSpends, wallet: wallet.name }, ...txs] : txs} hidden={hidden} isDark={true} walletName={wallet.name} onRemoveTx={onRemoveTx} />}
     </div>
   );
 }
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
-export function WalletScreen({ transactions, wallets, onAddWallet, onRemoveWallet, onSetBalance, onLogExpense }) {
+export function WalletScreen({ transactions, wallets, onAddWallet, onRemoveWallet, onUpdateWallet, onLogExpense, onRemoveTx }) {
   const [hidden, setHidden] = useState(true);
   const [modal, setModal] = useState(null); // 'addBank'|'addCard'|'updateBal'|'addCredit'|'payCard'
   const [target, setTarget] = useState(null); // wallet for action
@@ -171,6 +219,8 @@ export function WalletScreen({ transactions, wallets, onAddWallet, onRemoveWalle
   const [mGrad, setMGrad] = useState(GRAD_KEYS[0]);
   const [mNote, setMNote] = useState('');
   const [mPayFrom, setMPayFrom] = useState('');
+  const [mBillDate, setMBillDate] = useState('');
+  const [mThisMonth, setMThisMonth] = useState('');
 
   const balances = useMemo(() => computeBalances(wallets, transactions, month), [wallets, transactions, month]);
   const banks = wallets.filter(w => w.type === 'bank');
@@ -182,7 +232,15 @@ export function WalletScreen({ transactions, wallets, onAddWallet, onRemoveWalle
     return bankTotal - cardDebt;
   }, [banks, cards, balances]);
 
-  function closeModal() { setModal(null); setTarget(null); setMName(''); setMAmount(''); setMLimit(''); setMNote(''); setMPayFrom(''); }
+  function closeModal() { setModal(null); setTarget(null); setMName(''); setMAmount(''); setMLimit(''); setMNote(''); setMPayFrom(''); setMBillDate(''); setMThisMonth(''); }
+
+  async function handleRemoveLocalTx(walletId, tx) {
+    if (tx.transactionId.startsWith('init-')) {
+      await onUpdateWallet(walletId, { currentMonthSpends: 0 });
+    } else {
+      await onRemoveTx(tx.transactionId);
+    }
+  }
 
   async function handleAddBank() {
     if (!mName.trim()) return;
@@ -197,7 +255,16 @@ export function WalletScreen({ transactions, wallets, onAddWallet, onRemoveWalle
     if (!mName.trim() || !mLimit) return;
     setSaving(true);
     try {
-      await onAddWallet({ id: uuidv4(), name: mName.trim(), type: 'credit', color: mGrad, initialBalance: 0, creditLimit: parseFloat(mLimit) || 0, createdAt: todayStr() });
+      await onAddWallet({ id: uuidv4(), name: mName.trim(), type: 'credit', color: mGrad, initialBalance: 0, creditLimit: parseFloat(mLimit) || 0, createdAt: todayStr(), billDate: mBillDate, currentMonthSpends: parseFloat(mThisMonth) || 0 });
+      closeModal();
+    } finally { setSaving(false); }
+  }
+
+  async function handleEditCard() {
+    if (!mName.trim() || !mLimit) return;
+    setSaving(true);
+    try {
+      await onUpdateWallet(target.id, { name: mName.trim(), creditLimit: parseFloat(mLimit) || 0, color: mGrad, billDate: mBillDate, currentMonthSpends: parseFloat(mThisMonth) || 0 });
       closeModal();
     } finally { setSaving(false); }
   }
@@ -205,7 +272,7 @@ export function WalletScreen({ transactions, wallets, onAddWallet, onRemoveWalle
   async function handleUpdateBalance() {
     if (!mAmount) return;
     setSaving(true);
-    try { await onSetBalance(target.id, parseFloat(mAmount) || 0); closeModal(); }
+    try { await onUpdateWallet(target.id, { initialBalance: parseFloat(mAmount) || 0 }); closeModal(); }
     finally { setSaving(false); }
   }
 
@@ -268,12 +335,16 @@ export function WalletScreen({ transactions, wallets, onAddWallet, onRemoveWalle
             <p className="text-sm text-gray-400 text-center py-4 card">No bank accounts yet — add one to track your balance</p>
           )}
           <div className="space-y-3">
-            {banks.map(w => (
-              <BankCard key={w.id} wallet={w} balance={balances[w.name]?.balance || 0} hidden={hidden}
-                onUpdateBalance={() => { setTarget(w); setMAmount(String(balances[w.name]?.balance || 0)); setModal('updateBal'); }}
-                onAddCredit={() => { setTarget(w); setModal('addCredit'); }}
-                onDelete={() => onRemoveWallet(w.id)} />
-            ))}
+            {banks.map(w => {
+              const txs = transactions.filter(t => t.month === month && (t.wallet === w.name || (t.type === 'CardPayment' && t.wallet === w.name)));
+              return (
+                <BankCard key={w.id} wallet={w} balance={balances[w.name]?.balance || 0} hidden={hidden} txs={txs}
+                  onUpdateBalance={() => { setTarget(w); setMAmount(String(balances[w.name]?.balance || 0)); setModal('updateBal'); }}
+                  onAddCredit={() => { setTarget(w); setModal('addCredit'); }}
+                  onDelete={() => onRemoveWallet(w.id)}
+                  onRemoveTx={(tx) => handleRemoveLocalTx(w.id, tx)} />
+              );
+            })}
           </div>
         </div>
 
@@ -292,11 +363,16 @@ export function WalletScreen({ transactions, wallets, onAddWallet, onRemoveWalle
             <p className="text-sm text-gray-400 text-center py-4 card">No credit cards yet — add one to track spending</p>
           )}
           <div className="space-y-4">
-            {cards.map(w => (
-              <CreditCardUI key={w.id} wallet={w} bal={balances[w.name] || {}} hidden={hidden}
-                onPayBill={() => { setTarget(w); setMPayFrom(banks[0]?.name || ''); setModal('payCard'); }}
-                onDelete={() => onRemoveWallet(w.id)} />
-            ))}
+            {cards.map(w => {
+              const txs = transactions.filter(t => t.month === month && (t.wallet === w.name || (t.type === 'CardPayment' && t.paidTo === w.name)));
+              return (
+                <CreditCardUI key={w.id} wallet={w} bal={balances[w.name] || {}} hidden={hidden} txs={txs}
+                  onPayBill={() => { setTarget(w); setMPayFrom(banks[0]?.name || ''); setModal('payCard'); }}
+                  onEdit={() => { setTarget(w); setMName(w.name); setMLimit(String(w.creditLimit || '')); setMGrad(w.color || GRAD_KEYS[0]); setMBillDate(w.billDate || ''); setMThisMonth(String(w.currentMonthSpends || '')); setModal('editCard'); }}
+                  onDelete={() => onRemoveWallet(w.id)}
+                  onRemoveTx={(tx) => handleRemoveLocalTx(w.id, tx)} />
+              );
+            })}
           </div>
         </div>
       </div>
@@ -328,6 +404,10 @@ export function WalletScreen({ transactions, wallets, onAddWallet, onRemoveWalle
         <Modal title="Add Credit Card" onClose={closeModal}>
           <InputRow label="Card Name" value={mName} onChange={setMName} placeholder="e.g. HDFC Regalia, SBI Prime" />
           <InputRow label="Credit Limit (₹)" type="number" value={mLimit} onChange={setMLimit} placeholder="100000" />
+          <div className="grid grid-cols-2 gap-3">
+            <InputRow label="Bill Gen Date (Optional)" type="number" value={mBillDate} onChange={setMBillDate} placeholder="e.g. 15" />
+            <InputRow label="Spends So Far (₹)" type="number" value={mThisMonth} onChange={setMThisMonth} placeholder="0" />
+          </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Card Theme</label>
             <div className="flex gap-2 flex-wrap">
@@ -341,6 +421,31 @@ export function WalletScreen({ transactions, wallets, onAddWallet, onRemoveWalle
           <button onClick={handleAddCard} disabled={saving || !mName.trim() || !mLimit}
             className="btn-primary w-full flex items-center justify-center gap-2">
             {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><i className="ri-bank-card-line" /> Add Card</>}
+          </button>
+        </Modal>
+      )}
+
+      {modal === 'editCard' && target && (
+        <Modal title="Edit Credit Card" onClose={closeModal}>
+          <InputRow label="Card Name" value={mName} onChange={setMName} placeholder="e.g. HDFC Regalia, SBI Prime" />
+          <InputRow label="Credit Limit (₹)" type="number" value={mLimit} onChange={setMLimit} placeholder="100000" />
+          <div className="grid grid-cols-2 gap-3">
+            <InputRow label="Bill Gen Date (Optional)" type="number" value={mBillDate} onChange={setMBillDate} placeholder="e.g. 15" />
+            <InputRow label="Spends So Far (₹)" type="number" value={mThisMonth} onChange={setMThisMonth} placeholder="0" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Card Theme</label>
+            <div className="flex gap-2 flex-wrap">
+              {GRAD_KEYS.map(k => (
+                <button key={k} onClick={() => setMGrad(k)} type="button"
+                  className={`w-16 h-10 rounded-lg transition-all ${mGrad === k ? 'ring-2 ring-offset-2 ring-gray-400 scale-105' : ''}`}
+                  style={{ background: CARD_GRADIENTS[k] }} />
+              ))}
+            </div>
+          </div>
+          <button onClick={handleEditCard} disabled={saving || !mName.trim() || !mLimit}
+            className="btn-primary w-full flex items-center justify-center gap-2">
+            {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><i className="ri-save-line" /> Save Changes</>}
           </button>
         </Modal>
       )}

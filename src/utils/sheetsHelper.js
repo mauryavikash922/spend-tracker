@@ -17,7 +17,7 @@ const TX_HEADERS = [
   'Settlement Date', 'Transaction ID', 'Month', 'Comment', 'Wallet',
 ];
 
-const WALLET_HEADERS = ['ID', 'Name', 'Type', 'Color', 'InitialBalance', 'CreditLimit', 'CreatedAt'];
+const WALLET_HEADERS = ['ID', 'Name', 'Type', 'Color', 'InitialBalance', 'CreditLimit', 'CreatedAt', 'BillDate', 'CurrentMonthSpends'];
 
 const LEDGER_HEADERS = [
   'Person Name', 'Transaction ID', 'Date', 'Amount', 'Status',
@@ -254,6 +254,40 @@ export async function deleteTransaction(token, sheetId, transactionId) {
   });
 }
 
+export async function deleteLedgerEntriesByTxId(token, sheetId, transactionId) {
+  const ledgerTab = await getLedgerTabName(token, sheetId);
+  const data = await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(ledgerTab)}!A1:B`);
+  const rows = (data.values || []).slice(1);
+
+  const rowIndices = [];
+  rows.forEach((r, i) => {
+    if (r[1] === transactionId) {
+      rowIndices.push(i + 1); // 0-indexed in API
+    }
+  });
+
+  if (rowIndices.length === 0) return;
+
+  const spreadsheet = await apiRequest(token, `/${sheetId}`);
+  const lSheet = spreadsheet.sheets.find(s => s.properties.title === ledgerTab);
+  if (!lSheet) return;
+
+  rowIndices.sort((a, b) => b - a);
+
+  const requests = rowIndices.map(index => ({
+    deleteDimension: {
+      range: {
+        sheetId: lSheet.properties.sheetId,
+        dimension: 'ROWS',
+        startIndex: index,
+        endIndex: index + 1,
+      },
+    },
+  }));
+
+  await apiRequest(token, `/${sheetId}:batchUpdate`, 'POST', { requests });
+}
+
 export async function settlePerson(token, sheetId, personName, amount, ledger, transactions, settleComment = '') {
   const today = new Date();
   const dd = String(today.getDate()).padStart(2, '0');
@@ -382,6 +416,41 @@ export async function saveInvestmentBuckets(token, sheetId, buckets) {
   }
 }
 
+export async function getAppPin(token, sheetId) {
+  try {
+    const data = await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(TABS.SETTINGS)}!A2:B`);
+    const rows = data.values || [];
+    const row = rows.find(r => r[0] === 'app_pin');
+    return row ? row[1] : null;
+  } catch { return null; }
+}
+
+export async function saveAppPin(token, sheetId, hashedPin) {
+  const data = await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(TABS.SETTINGS)}!A2:B`);
+  const rows = data.values || [];
+  const rowIdx = rows.findIndex(r => r[0] === 'app_pin');
+  const range = rowIdx >= 0
+    ? `${TABS.SETTINGS}!A${rowIdx + 2}:B${rowIdx + 2}`
+    : `${TABS.SETTINGS}!A2:B2`;
+
+  if (hashedPin === null) {
+      if (rowIdx >= 0) {
+           await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(range)}:clear`, 'POST', {});
+      }
+      return;
+  }
+
+  if (rowIdx >= 0) {
+    await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=RAW`, 'PUT', {
+      values: [['app_pin', hashedPin]],
+    });
+  } else {
+    await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, 'POST', {
+      values: [['app_pin', hashedPin]],
+    });
+  }
+}
+
 // ── Wallets ──────────────────────────────────────────────────────────────────
 
 async function ensureWalletsTab(token, sheetId) {
@@ -400,7 +469,7 @@ async function ensureWalletsTab(token, sheetId) {
 
 export async function getWallets(token, sheetId) {
   try {
-    const data = await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(TABS.WALLETS)}!A2:G`);
+    const data = await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(TABS.WALLETS)}!A2:I`);
     return (data.values || []).map((r, i) => ({
       _rowIndex: i + 2,
       id: r[0] || '',
@@ -410,20 +479,33 @@ export async function getWallets(token, sheetId) {
       initialBalance: parseFloat(r[4]) || 0,
       creditLimit: parseFloat(r[5]) || 0,
       createdAt: r[6] || '',
+      billDate: r[7] || '',
+      currentMonthSpends: parseFloat(r[8]) || 0,
+      currentBalance: 0, // Computed later
     }));
   } catch { return []; }
 }
 
 export async function appendWallet(token, sheetId, wallet) {
   await ensureWalletsTab(token, sheetId);
-  await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(TABS.WALLETS)}!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, 'POST', {
-    values: [[wallet.id, wallet.name, wallet.type, wallet.color, wallet.initialBalance, wallet.creditLimit, wallet.createdAt]],
+  const row = [
+    wallet.id, wallet.name, wallet.type, wallet.color,
+    wallet.initialBalance, wallet.creditLimit, wallet.createdAt,
+    wallet.billDate || '', wallet.currentMonthSpends || 0,
+  ];
+  await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(TABS.WALLETS)}!A1:I1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, 'POST', {
+    values: [row],
   });
 }
 
 export async function updateWalletRow(token, sheetId, rowIndex, wallet) {
-  await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(TABS.WALLETS)}!A${rowIndex}:G${rowIndex}?valueInputOption=RAW`, 'PUT', {
-    values: [[wallet.id, wallet.name, wallet.type, wallet.color, wallet.initialBalance, wallet.creditLimit, wallet.createdAt]],
+  const row = [
+    wallet.id, wallet.name, wallet.type, wallet.color,
+    wallet.initialBalance, wallet.creditLimit, wallet.createdAt,
+    wallet.billDate || '', wallet.currentMonthSpends || 0,
+  ];
+  await apiRequest(token, `/${sheetId}/values/${encodeURIComponent(TABS.WALLETS)}!A${rowIndex}:I${rowIndex}?valueInputOption=RAW`, 'PUT', {
+    values: [row],
   });
 }
 

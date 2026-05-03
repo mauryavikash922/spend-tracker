@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CategoryManager } from '../Categories/CategoryPicker';
+import { PinPad } from '../Auth/PinPad';
 
 function InfoRow({ icon, label, value }) {
   return (
@@ -29,9 +30,10 @@ const TOOL_CARDS = [
   },
 ];
 
-export function ProfileScreen({ user, onLogout, customCategories, onAddCategory, onRemoveCategory, token, sheetId, onNavigate }) {
+export function ProfileScreen({ user, onLogout, customCategories, onAddCategory, onRemoveCategory, token, sheetId, onNavigate, appPin, setAppPin }) {
   const [downloading, setDownloading] = useState(false);
   const [downloadMsg, setDownloadMsg] = useState(null);
+  const [pinMode, setPinMode] = useState(null); // 'setup' | 'remove'
 
   const handleDownload = async () => {
     if (!token || !sheetId) return;
@@ -122,6 +124,28 @@ export function ProfileScreen({ user, onLogout, customCategories, onAddCategory,
           </div>
         </div>
 
+        {/* Privacy & Security */}
+        <div className="card space-y-3">
+          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+            <i className="ri-shield-keyhole-line text-indigo-500" />Privacy & Security
+          </h3>
+          <p className="text-xs text-gray-500">Protect access to your Wallet and Investments tabs.</p>
+          {appPin ? (
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => setPinMode('remove')}
+                className="btn-secondary w-full text-sm py-2"
+              >
+                Remove PIN Lock
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => setPinMode('setup')} className="btn-primary w-full text-sm py-2">
+              Set PIN Lock
+            </button>
+          )}
+        </div>
+
         {/* Custom Categories */}
         <div className="card">
           <CategoryManager
@@ -184,6 +208,22 @@ export function ProfileScreen({ user, onLogout, customCategories, onAddCategory,
           Sign Out
         </button>
       </div>
+
+      {pinMode && (
+        <PinPad
+          mode={pinMode}
+          appPin={appPin}
+          onSuccess={(hashedPin) => {
+            if (pinMode === 'setup') {
+              setAppPin(hashedPin);
+            } else if (pinMode === 'remove') {
+              setAppPin(null);
+            }
+            setPinMode(null);
+          }}
+          onCancel={() => setPinMode(null)}
+        />
+      )}
     </div>
   );
 }

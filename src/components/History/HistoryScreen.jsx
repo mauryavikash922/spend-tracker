@@ -117,7 +117,7 @@ function TxRow({ tx, onDelete, onEdit, allCategories }) {
   );
 }
 
-export function HistoryScreen({ transactions, onDelete, onEdit, allCategories }) {
+export function HistoryScreen({ transactions, onDelete, onEdit, allCategories, wallets = [] }) {
   const [filters, setFilters] = useState({ month: 'All', category: 'All', type: 'All' });
   const [toast, setToast] = useState(null);
   const [editTx, setEditTx] = useState(null);
@@ -222,7 +222,7 @@ export function HistoryScreen({ transactions, onDelete, onEdit, allCategories })
               </button>
             </div>
             <div className="p-4">
-              <LogForm editTx={editTx} onEditSubmit={handleEditSubmit} loading={submitting} allCategories={allCategories} />
+              <LogForm editTx={editTx} onEditSubmit={handleEditSubmit} loading={submitting} allCategories={allCategories} wallets={wallets} />
             </div>
           </div>
         </div>

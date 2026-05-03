@@ -1,10 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   getSheetData, appendTransaction, appendLedgerRows,
-  deleteTransaction, settlePerson, settleDebt,
+  deleteTransaction, settlePerson, settleDebt, deleteLedgerEntriesByTxId,
   updateTransaction, getCustomCategories, saveCustomCategories,
   getInvestmentBuckets, saveInvestmentBuckets,
   getWallets, appendWallet, updateWalletRow, deleteWalletRow,
+  getAppPin, saveAppPin,
 } from '../utils/sheetsHelper';
 import { toMonthLabel } from '../utils/formatters';
 import { DEFAULT_CATEGORIES } from '../utils/categories';
@@ -20,6 +21,7 @@ export function useGoogleSheets(token, sheetId) {
   const [customCategories, setCustomCategories] = useState([]);
   const [investmentBuckets, setInvestmentBuckets] = useState([]);
   const [wallets, setWallets] = useState([]);
+  const [appPin, setAppPinState] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const hasFetched = useRef(false);
@@ -38,17 +40,19 @@ export function useGoogleSheets(token, sheetId) {
     setLoading(true);
     setError(null);
     try {
-      const [data, cats, buckets, wals] = await Promise.all([
+      const [data, cats, buckets, wals, pin] = await Promise.all([
         getSheetData(token, sheetId),
         getCustomCategories(token, sheetId),
         getInvestmentBuckets(token, sheetId),
         getWallets(token, sheetId),
+        getAppPin(token, sheetId),
       ]);
       setTransactions(data.transactions);
       setLedger(data.ledger);
       setCustomCategories(cats);
       setInvestmentBuckets(buckets);
       setWallets(wals);
+      setAppPinState(pin);
       hasFetched.current = true;
     } catch (e) {
       setError(e.message);
@@ -129,35 +133,58 @@ export function useGoogleSheets(token, sheetId) {
 
     const fullAmount = parseFloat(form.fullAmount);
     const month = toMonthLabel(form.date);
-    const type = tx.type;
+    const type = form.type;
 
     let myShare = fullAmount;
     if (type === 'Shared') {
-      myShare = fullAmount / Math.max(1, tx.splitCount);
+      const splitCount = parseInt(form.splitCount) || 2;
+      myShare = form.splitType === 'custom' ? parseFloat(form.myShare) || 0 : fullAmount / splitCount;
     } else if (type === 'Lent' || type === 'Borrowed') {
       myShare = 0;
     }
 
+    if (['Shared', 'Lent', 'Borrowed'].includes(tx.type)) {
+      await deleteLedgerEntriesByTxId(token, sheetId, transactionId);
+    }
+
+    const ledgerRows = [];
+    if (type === 'Shared') {
+      const splitCount = parseInt(form.splitCount) || 2;
+      const sharePerPerson = form.splitType === 'custom' ? (fullAmount - myShare) / Math.max(1, splitCount - 1) : fullAmount / splitCount;
+      const names = form.sharedWith.split(',').map(n => n.trim()).filter(Boolean);
+      names.forEach(name => {
+        ledgerRows.push(buildLedgerRow(name, transactionId, form.date, sharePerPerson, form.paidTo || 'Shared', 'credit'));
+      });
+    } else if (type === 'Lent') {
+      ledgerRows.push(buildLedgerRow(form.personName, transactionId, form.date, fullAmount, form.paidTo || 'Lent', 'credit'));
+    } else if (type === 'Borrowed') {
+      ledgerRows.push(buildLedgerRow(form.personName, transactionId, form.date, fullAmount, form.paidTo || 'Borrowed', 'debit'));
+    }
+
+    if (ledgerRows.length) await appendLedgerRows(token, sheetId, ledgerRows);
+
     const txRow = [
       form.date, form.paidTo, fullAmount, myShare, form.category,
-      type, tx.sharedWith, tx.splitCount,
-      tx.settlementStatus, tx.settlementDate, transactionId, month, form.comment || '', tx.wallet || '',
+      type, form.sharedWith || '', form.splitCount || 1,
+      tx.settlementStatus, tx.settlementDate, transactionId, month, form.comment || '', form.wallet || '',
     ];
 
     await updateTransaction(token, sheetId, tx._rowIndex, txRow);
-    setTransactions(prev => prev.map(t =>
-      t.transactionId === transactionId
-        ? { ...t, date: form.date, paidTo: form.paidTo, fullAmount, myShare, category: form.category, month, comment: form.comment || '' }
-        : t
-    ));
-  }, [token, sheetId, transactions]);
+    
+    // Simplest way to sync state fully after a complex edit is refetch
+    await fetchAll(true);
+  }, [token, sheetId, transactions, fetchAll]);
 
   const removeTx = useCallback(async (transactionId) => {
     if (!token || !sheetId) throw new Error('Not connected');
+    const tx = transactions.find(t => t.transactionId === transactionId);
     await deleteTransaction(token, sheetId, transactionId);
+    if (tx && ['Shared', 'Lent', 'Borrowed'].includes(tx.type)) {
+      await deleteLedgerEntriesByTxId(token, sheetId, transactionId);
+    }
     setTransactions(prev => prev.filter(t => t.transactionId !== transactionId));
     setLedger(prev => prev.filter(r => r.transactionId !== transactionId));
-  }, [token, sheetId]);
+  }, [token, sheetId, transactions]);
 
   const settle = useCallback(async (personName, amount, comment = '') => {
     if (!token || !sheetId) throw new Error('Not connected');
@@ -208,13 +235,18 @@ export function useGoogleSheets(token, sheetId) {
     await deleteWalletRow(token, sheetId, w._rowIndex);
   }, [token, sheetId, wallets]);
 
-  const setWalletBalance = useCallback(async (walletId, newBalance) => {
+  const updateWallet = useCallback(async (walletId, updates) => {
     const w = wallets.find(w => w.id === walletId);
     if (!w) return;
-    const updated = { ...w, initialBalance: newBalance };
+    const updated = { ...w, ...updates };
     setWallets(prev => prev.map(x => x.id === walletId ? updated : x));
     await updateWalletRow(token, sheetId, w._rowIndex, updated);
   }, [token, sheetId, wallets]);
+
+  const setAppPin = useCallback(async (hashedPin) => {
+    setAppPinState(hashedPin);
+    await saveAppPin(token, sheetId, hashedPin);
+  }, [token, sheetId]);
 
   const personNames = [...new Set(
     transactions
@@ -227,12 +259,14 @@ export function useGoogleSheets(token, sheetId) {
     transactions, ledger, customCategories, allCategories,
     investmentBuckets,
     wallets,
+    appPin,
     loading, error, fetchAll,
     logExpense, editExpense, removeTx,
     settle, settleMyDebt,
     addCategory, removeCategory,
     addBucket, removeBucket,
-    addWallet, removeWallet, setWalletBalance,
+    addWallet, removeWallet, updateWallet,
+    setAppPin,
     personNames,
   };
 }

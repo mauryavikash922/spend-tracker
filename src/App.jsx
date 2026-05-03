@@ -11,6 +11,7 @@ import { HistoryScreen } from './components/History/HistoryScreen';
 import { ProfileScreen } from './components/Profile/ProfileScreen';
 import { InvestmentsScreen } from './components/Investments/InvestmentsScreen';
 import { WalletScreen } from './components/Wallet/WalletScreen';
+import { PinPad } from './components/Auth/PinPad';
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -42,12 +43,24 @@ function AppContent() {
     settle, settleMyDebt,
     addCategory, removeCategory,
     addBucket, removeBucket,
-    addWallet, removeWallet, setWalletBalance,
+    addWallet, removeWallet, updateWallet,
+    appPin, setAppPin,
     personNames,
   } = useGoogleSheets(token, sheetId);
 
   const [activeTab, setActiveTab] = useState('home');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [targetTab, setTargetTab] = useState(null);
+
+  const navigate = (tabId) => {
+    if (tabId === activeTab) return;
+    if (['wallet', 'investments'].includes(tabId) && appPin) {
+      setTargetTab(tabId);
+      setActiveTab('lockScreen');
+    } else {
+      setActiveTab(tabId);
+    }
+  };
 
   useEffect(() => {
     const on = () => setIsOnline(true);
@@ -101,6 +114,7 @@ function AppContent() {
         onDelete={removeTx}
         onEdit={editExpense}
         allCategories={allCategories}
+        wallets={wallets}
       />
     ),
     investments: (
@@ -117,8 +131,9 @@ function AppContent() {
         wallets={wallets}
         onAddWallet={addWallet}
         onRemoveWallet={removeWallet}
-        onSetBalance={setWalletBalance}
+        onUpdateWallet={updateWallet}
         onLogExpense={logExpense}
+        onRemoveTx={removeTx}
       />
     ),
     profile: (
@@ -130,7 +145,19 @@ function AppContent() {
         onRemoveCategory={removeCategory}
         token={token}
         sheetId={sheetId}
-        onNavigate={setActiveTab}
+        onNavigate={navigate}
+        appPin={appPin}
+        setAppPin={setAppPin}
+      />
+    ),
+    lockScreen: (
+      <PinPad
+        mode="unlock"
+        appPin={appPin}
+        onSuccess={() => {
+          setActiveTab(targetTab || 'home');
+        }}
+        onCancel={() => setActiveTab('profile')}
       />
     ),
   };
@@ -158,9 +185,9 @@ function AppContent() {
         </div>
       )}
 
-      <div className="flex-1">{screens[activeTab]}</div>
+      <div className="flex-1 pb-16">{screens[activeTab]}</div>
 
-      <BottomNav active={activeTab} onChange={setActiveTab} />
+      {activeTab !== 'lockScreen' && <BottomNav active={activeTab} onChange={navigate} />}
     </div>
   );
 }
