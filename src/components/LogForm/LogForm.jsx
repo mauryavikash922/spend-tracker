@@ -94,7 +94,10 @@ export function LogForm({ onSubmit, onEditSubmit, editTx, loading, personNames =
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.amount || !form.paidTo) return;
+    const isPeopleType = form.type === 'Lent' || form.type === 'Borrowed';
+    if (!form.amount) return;
+    if (!isPeopleType && !form.paidTo) return;   // Personal/Shared require Paid To
+    if (isPeopleType && !form.personName) return; // Lent/Borrowed require a person name
     const encodedComment = form.category === 'Investment'
       ? formatBucketComment(form.investmentBucket, form.comment)
       : form.comment || '';
